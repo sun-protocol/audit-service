@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import shutil
@@ -170,6 +171,7 @@ async def audit(skill: str, file: UploadFile = File(...)):
             skill=skill_obj,
             code_dir=str(code_dir),
         )
+        await asyncio.sleep(2)
 
         # 5. Read report from skill-defined path, fallback to agent output
         report_candidates = [
