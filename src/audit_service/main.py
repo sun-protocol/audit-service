@@ -88,6 +88,7 @@ def _run_security_audit_background(
         _write_error_report(report_dir, "Security audit failed. See server logs.")
     finally:
         loop.close()
+        _cleanup_report_dir(report_dir)
 
 
 def _run_pr_audit_background(
@@ -122,6 +123,19 @@ def _run_pr_audit_background(
         _write_error_report(report_dir, "PR audit failed. See server logs.")
     finally:
         loop.close()
+        _cleanup_report_dir(report_dir)
+
+
+def _cleanup_report_dir(report_dir: Path) -> None:
+    """Remove code/ directory and upload.zip after report is generated."""
+    code_dir = report_dir / "code"
+    if code_dir.exists():
+        shutil.rmtree(code_dir, ignore_errors=True)
+        logger.info("Cleaned up code directory: %s", code_dir)
+    zip_path = report_dir / "upload.zip"
+    if zip_path.exists():
+        zip_path.unlink()
+        logger.info("Cleaned up upload zip: %s", zip_path)
 
 
 def _resolve_report(
