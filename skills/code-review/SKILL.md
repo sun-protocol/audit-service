@@ -175,14 +175,16 @@ For each issue found:
 
 ### Step 4: Generate Report
 
-Generate the final report following `resources/review_report_template.md`. **SAVE** to `.audit/Audit-Report.md`.
+> **CRITICAL**: You MUST write the final report to `.audit/Audit-Report.md` (relative to the code directory root). Create the `.audit/` directory if it does not exist. The report file MUST be at this exact path — the system reads the report from this location.
 
-The report must include:
+Generate the report following `resources/review_report_template.md`. The report must include:
 1. **PR Overview**: Branch info, commit summary, files changed, change statistics
 2. **Change Summary**: Grouped by logical unit, what each change does
 3. **Detailed Findings**: All issues found, ordered by severity
 4. **Positive Observations**: Good practices observed in the changes
 5. **Review Verdict**: Approve / Request Changes / Comment, with rationale
+
+After writing, verify the file exists at `.audit/Audit-Report.md`.
 
 ---
 

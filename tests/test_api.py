@@ -1,7 +1,7 @@
 import io
 import zipfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -112,47 +112,36 @@ async def test_audit_invalid_zip(test_zip: bytes):
 
 @pytest.mark.asyncio
 async def test_audit_success(test_zip: bytes):
-    mock_result = AsyncMock()
-    mock_result.result = "# Audit Report\n\nNo issues."
-
-    async def mock_query(*args, **kwargs):
-        yield mock_result
-
-    with (
-        patch("src.audit_service.auditor.query", side_effect=mock_query),
-        patch("src.audit_service.auditor.ResultMessage", type(mock_result)),
-    ):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+    """Endpoint should return immediately with processing status."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with patch("src.audit_service.main._executor") as mock_executor:
             resp = await client.post(
                 "/audit-security/backend-server-scanner",
                 files={"file": ("code.zip", test_zip, "application/zip")},
             )
+            mock_executor.submit.assert_called_once()
 
     assert resp.status_code == 200
-    assert "report_url" in resp.json()
-    assert resp.json()["report_url"].endswith("/audit-report.html")
+    data = resp.json()
+    assert data["status"] == "processing"
+    assert data["report_url"].endswith("/audit-report.html")
+    assert "/security/" in data["report_url"]
+    assert "status_url" in data
 
 
 @pytest.mark.asyncio
 async def test_audit_sanitizes_project_name():
-    mock_result = AsyncMock()
-    mock_result.result = "# Report"
-
-    async def mock_query(*args, **kwargs):
-        yield mock_result
-
     malicious_zip = _make_zip({"main.py": "x"})
 
-    with (
-        patch("src.audit_service.auditor.query", side_effect=mock_query),
-        patch("src.audit_service.auditor.ResultMessage", type(mock_result)),
-    ):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with patch("src.audit_service.main._executor"):
             resp = await client.post(
                 "/audit-security/backend-server-scanner",
-                files={"file": ("../../etc/passwd.zip", malicious_zip, "application/zip")},
+                files={
+                    "file": ("../../etc/passwd.zip", malicious_zip, "application/zip")
+                },
             )
 
     assert resp.status_code == 200

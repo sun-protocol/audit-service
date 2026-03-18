@@ -1,7 +1,7 @@
 import io
 import zipfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -124,25 +124,20 @@ async def test_pr_audit_missing_git_directory(test_zip: bytes):
 
 @pytest.mark.asyncio
 async def test_pr_audit_success(git_zip: bytes):
-    mock_result = AsyncMock()
-    mock_result.result = "# PR Audit Report\n\nNo issues."
-
-    async def mock_query(*args, **kwargs):
-        yield mock_result
-
-    with (
-        patch("src.audit_service.auditor.query", side_effect=mock_query),
-        patch("src.audit_service.auditor.ResultMessage", type(mock_result)),
-    ):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+    """Endpoint should return immediately with processing status."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with patch("src.audit_service.main._executor") as mock_executor:
             resp = await client.post(
                 "/audit-pr/backend-server-scanner",
                 files={"file": ("code.zip", git_zip, "application/zip")},
                 data={"from_branch": "main", "to_branch": "feature/new-token"},
             )
+            mock_executor.submit.assert_called_once()
 
     assert resp.status_code == 200
-    assert "report_url" in resp.json()
-    assert "/pr/" in resp.json()["report_url"]
-    assert resp.json()["report_url"].endswith("/audit-report.html")
+    data = resp.json()
+    assert data["status"] == "processing"
+    assert "/pr/" in data["report_url"]
+    assert data["report_url"].endswith("/audit-report.html")
+    assert "status_url" in data
