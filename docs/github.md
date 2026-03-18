@@ -6,12 +6,12 @@ Integrate the audit service into your GitHub workflow to automatically audit cod
 
 Add a workflow file to your repository to trigger audits automatically.
 
-### Auto Audit on Pull Request
+### Security Audit on Pull Request
 
-Create `.github/workflows/audit.yml` in the target repository:
+Create `.github/workflows/audit-security.yml` in the target repository:
 
 ```yaml
-name: Code Audit
+name: Security Audit
 
 on:
   pull_request:
@@ -29,19 +29,37 @@ jobs:
         run: |
           zip -r code.zip . -x '.git/*' 'node_modules/*' '.venv/*'
 
-      - name: Run audit
+      - name: Submit audit
         id: audit
         run: |
-          RESPONSE=$(curl -s -X POST "${{ vars.AUDIT_SERVICE_URL }}/audit-security/${{ vars.AUDIT_SKILL }}" \
+          RESPONSE=$(curl -s -X POST "${{ vars.AUDIT_SERVICE_URL }}/audit-security/${{ vars.AUDIT_SECURITY_SKILL }}" \
             -H "X-API-Key: ${{ secrets.AUDIT_API_KEY }}" \
             -F "file=@code.zip")
           echo "response=$RESPONSE" >> "$GITHUB_OUTPUT"
+          STATUS_URL=$(echo "$RESPONSE" | jq -r '.status_url // empty')
           REPORT_URL=$(echo "$RESPONSE" | jq -r '.report_url // empty')
-          if [ -z "$REPORT_URL" ]; then
-            echo "Audit failed: $RESPONSE"
+          if [ -z "$STATUS_URL" ]; then
+            echo "Audit submission failed: $RESPONSE"
             exit 1
           fi
+          echo "status_url=$STATUS_URL" >> "$GITHUB_OUTPUT"
           echo "report_url=$REPORT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for audit to complete
+        id: wait
+        run: |
+          STATUS_URL="${{ vars.AUDIT_SERVICE_URL }}${{ steps.audit.outputs.status_url }}"
+          for i in $(seq 1 60); do
+            STATUS=$(curl -s "$STATUS_URL" | jq -r '.status')
+            if [ "$STATUS" = "completed" ]; then
+              echo "Audit completed"
+              exit 0
+            fi
+            echo "Attempt $i: status=$STATUS, waiting 30s..."
+            sleep 30
+          done
+          echo "Audit timed out after 30 minutes"
+          exit 1
 
       - name: Comment PR with report link
         if: github.event_name == 'pull_request'
@@ -53,9 +71,86 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## Audit Report\n\nAudit completed. [View Report](${reportUrl})`
+              body: `## Security Audit Report\n\nAudit completed. [View Report](${reportUrl})`
             });
 ```
+
+### PR Code Review on Pull Request
+
+Create `.github/workflows/audit-pr.yml` in the target repository.
+This packages the code **with .git history** so the audit agent can `git diff` between branches.
+
+```yaml
+name: PR Code Review
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (with full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Package source code (including .git)
+        run: |
+          zip -r code.zip . -x 'node_modules/*' '.venv/*'
+
+      - name: Submit PR audit
+        id: audit
+        run: |
+          RESPONSE=$(curl -s -X POST "${{ vars.AUDIT_SERVICE_URL }}/audit-pr/${{ vars.AUDIT_PR_SKILL }}" \
+            -H "X-API-Key: ${{ secrets.AUDIT_API_KEY }}" \
+            -F "file=@code.zip" \
+            -F "from_branch=${{ github.base_ref }}" \
+            -F "to_branch=${{ github.head_ref }}")
+          echo "response=$RESPONSE" >> "$GITHUB_OUTPUT"
+          STATUS_URL=$(echo "$RESPONSE" | jq -r '.status_url // empty')
+          REPORT_URL=$(echo "$RESPONSE" | jq -r '.report_url // empty')
+          if [ -z "$STATUS_URL" ]; then
+            echo "PR audit submission failed: $RESPONSE"
+            exit 1
+          fi
+          echo "status_url=$STATUS_URL" >> "$GITHUB_OUTPUT"
+          echo "report_url=$REPORT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for audit to complete
+        id: wait
+        run: |
+          STATUS_URL="${{ vars.AUDIT_SERVICE_URL }}${{ steps.audit.outputs.status_url }}"
+          for i in $(seq 1 60); do
+            STATUS=$(curl -s "$STATUS_URL" | jq -r '.status')
+            if [ "$STATUS" = "completed" ]; then
+              echo "PR audit completed"
+              exit 0
+            fi
+            echo "Attempt $i: status=$STATUS, waiting 30s..."
+            sleep 30
+          done
+          echo "PR audit timed out after 30 minutes"
+          exit 1
+
+      - name: Comment PR with report link
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const reportUrl = `${{ vars.AUDIT_SERVICE_URL }}${{ steps.audit.outputs.report_url }}`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## PR Code Review Report\n\nReview completed. [View Report](${reportUrl})`
+            });
+```
+
+**Key differences from security audit:**
+- `fetch-depth: 0` — fetches full git history (required for `git diff`)
+- `.git` is **included** in the zip (not excluded)
+- `from_branch` and `to_branch` are passed as form fields, using `github.base_ref` and `github.head_ref`
 
 ### Required Configuration
 
@@ -72,7 +167,8 @@ In your repository **Settings > Secrets and variables > Actions**:
 | Name | Value | Example |
 |------|-------|---------|
 | `AUDIT_SERVICE_URL` | Audit service base URL | `https://audit.example.com` |
-| `AUDIT_SKILL` | Skill to use for audit | `smart-contract-audit` |
+| `AUDIT_SECURITY_SKILL` | Skill for security audit | `smart-contract-audit` |
+| `AUDIT_PR_SKILL` | Skill for PR code review | `code-review` |
 
 ## Option 2: GitHub Webhooks
 

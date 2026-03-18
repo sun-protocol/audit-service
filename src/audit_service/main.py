@@ -131,11 +131,11 @@ def _resolve_report(
     agent_output: str,
 ) -> str:
     """Find the skill-defined report file, fall back to agent output."""
-    report_candidates = [
-        code_dir / skill.report_path,
-        report_dir / skill.report_path,
-    ]
-    skill_report_file = next((f for f in report_candidates if f.exists()), None)
+    suffix = Path(skill.report_path)
+    skill_report_file = next(
+        (p for p in report_dir.rglob("*") if p.is_file() and p.match(f"*/{suffix}")),
+        None,
+    )
     if skill_report_file is not None:
         logger.info("Using report from %s", skill_report_file)
         return skill_report_file.read_text(encoding="utf-8")

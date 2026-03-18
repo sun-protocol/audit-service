@@ -51,9 +51,9 @@ CLAUDE_CODE_OAUTH_TOKEN=your-token-here
 ```
 
 **Service authentication** (optional):
-- `API_KEYS` — comma-separated list of valid API keys for clients calling the audit endpoint
+- `API_KEYS` — comma-separated list of valid API keys for clients calling the audit endpoints
 - Generate keys with: `python tools/gen_api_key.py`
-- When `API_KEYS` is empty, the audit endpoint is open (no auth required)
+- When `API_KEYS` is empty, the audit endpoints are open (no auth required)
 
 ## Running
 
@@ -82,7 +82,7 @@ The service will be available at `http://localhost:8000`. The reports directory 
 
 ### POST /audit-security/{skill}
 
-Upload a zip archive and run a full security audit with the specified skill. Returns the URL of the generated HTML report.
+Upload a zip archive and submit a full security audit with the specified skill. The audit runs asynchronously in the background — the endpoint returns immediately with a `status_url` to poll for completion.
 
 **Path parameter:**
 
@@ -113,19 +113,22 @@ curl -X POST http://localhost:8000/audit-security/smart-contract-audit \
 **Response:** `application/json`
 
 ```json
-{"report_url": "/reports/code/20260318-150000/audit-report.html"}
+{
+  "report_url": "/reports/code/security/20260318-150000/audit-report.html",
+  "status_url": "/audit-status/code/security/20260318-150000/audit-report.html",
+  "status": "processing"
+}
 ```
 
 | Status | Description |
 |--------|-------------|
-| 200 | Audit completed, returns report URL |
+| 200 | Audit submitted, returns report URL and status URL |
 | 400 | Invalid skill / invalid zip / file too large |
 | 401 | Invalid or missing API key |
-| 500 | Audit execution failed |
 
 ### POST /audit-pr/{skill}
 
-Upload a zip archive and audit only the changes between two branches (PR audit). Returns the URL of the generated HTML report.
+Upload a zip archive (with `.git` history) and audit only the changes between two branches. The audit runs asynchronously in the background.
 
 **Path parameter:**
 
@@ -137,7 +140,7 @@ Upload a zip archive and audit only the changes between two branches (PR audit).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `file` | file | Zip archive of source code (must include git history) |
+| `file` | file | Zip archive of source code (must include `.git` directory) |
 | `from_branch` | string | Target branch, e.g. `main` |
 | `to_branch` | string | Source branch, e.g. `feature/xxx` |
 
@@ -150,7 +153,7 @@ Upload a zip archive and audit only the changes between two branches (PR audit).
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/audit-pr/smart-contract-audit \
+curl -X POST http://localhost:8000/audit-pr/code-review \
   -H "X-API-Key: ask-xxxxx" \
   -F "file=@code.zip" \
   -F "from_branch=main" \
@@ -160,16 +163,41 @@ curl -X POST http://localhost:8000/audit-pr/smart-contract-audit \
 **Response:** `application/json`
 
 ```json
-{"report_url": "/reports/code/20260318-150000/audit-report.html"}
+{
+  "report_url": "/reports/code/pr/20260318-150000/audit-report.html",
+  "status_url": "/audit-status/code/pr/20260318-150000/audit-report.html",
+  "status": "processing"
+}
 ```
 
 | Status | Description |
 |--------|-------------|
-| 200 | Audit completed, returns report URL |
-| 400 | Invalid skill / invalid zip / file too large / missing branch params |
+| 200 | Audit submitted, returns report URL and status URL |
+| 400 | Invalid skill / invalid zip / file too large / missing `.git` / missing branch params |
 | 401 | Invalid or missing API key |
 | 422 | Missing required form fields |
-| 500 | Audit execution failed |
+
+### GET /audit-status/{path}
+
+Poll the status of a submitted audit.
+
+**Example:**
+
+```bash
+curl http://localhost:8000/audit-status/code/security/20260318-150000/audit-report.html
+```
+
+**Response:**
+
+```json
+{"status": "pending"}
+```
+
+or when complete:
+
+```json
+{"status": "completed", "report_url": "/reports/code/security/20260318-150000/audit-report.html"}
+```
 
 ### GET /reports/{path}
 
@@ -177,7 +205,8 @@ Browse audit reports. Navigate directories and view generated HTML reports direc
 
 - `GET /` redirects to `/reports/`
 - `GET /reports/` lists all projects
-- `GET /reports/{project}/{timestamp}/audit-report.html` serves the report
+- `GET /reports/{project}/security/{timestamp}/audit-report.html` serves security audit report
+- `GET /reports/{project}/pr/{timestamp}/audit-report.html` serves PR audit report
 
 ## Skills
 
@@ -193,6 +222,12 @@ skills/
 │   │   └── audit_report_template.md
 │   └── plugins/                # Optional plugins
 │       └── java/
+├── code-review/                # PR code review skill
+│   ├── SKILL.md
+│   ├── references/
+│   │   └── CODE_REVIEW_CHECKLIST.md
+│   └── resources/
+│       └── review_report_template.md
 └── smart-contract-audit/
     ├── SKILL.md
     ├── references/
@@ -240,15 +275,21 @@ python tools/md2html.py report.md output.html   # custom output path
 
 ## Reports
 
-Audit reports are saved under `reports/<project_name>/<timestamp>/`:
+Audit reports are saved under `reports/<project_name>/<type>/<timestamp>/`:
 
 ```
 reports/
-└── trc-8004-contracts/
-    └── 20260318-131955/
-        ├── audit-report.html   # HTML report
-        ├── upload.zip          # Original uploaded archive
-        └── code/               # Extracted source code
+└── my-project/
+    ├── security/                   # Security audit reports
+    │   └── 20260318-131955/
+    │       ├── audit-report.html   # HTML report
+    │       ├── upload.zip          # Original uploaded archive
+    │       └── code/               # Extracted source code
+    └── pr/                         # PR code review reports
+        └── 20260318-180005/
+            ├── audit-report.html
+            ├── upload.zip
+            └── code/
 ```
 
 ## Testing
