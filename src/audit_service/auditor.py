@@ -1,8 +1,33 @@
+import logging
+
+import claude_code_sdk._internal.client as _client
+import claude_code_sdk._internal.message_parser as _mp
 from claude_code_sdk import ClaudeCodeOptions, ResultMessage, query
 
 from .auth import resolve_auth_env
 from .config import settings
 from .skill_loader import Skill, build_system_prompt
+
+logger = logging.getLogger(__name__)
+
+# Workaround: claude-code-sdk<=0.0.25 does not handle `rate_limit_event` messages
+# from the API, causing MessageParseError. This patch skips unknown message types
+# so audits can complete normally. Remove once the SDK adds native support.
+_original_parse = _mp.parse_message
+
+
+def _patched_parse(data):
+    try:
+        return _original_parse(data)
+    except _mp.MessageParseError as e:
+        if "Unknown message type" in str(e):
+            logger.debug("Skipping unknown SDK message: %s", e)
+            return None
+        raise
+
+
+_mp.parse_message = _patched_parse
+_client.parse_message = _patched_parse
 
 
 async def run_audit(skill: Skill, code_dir: str) -> str:
@@ -28,7 +53,7 @@ async def run_audit(skill: Skill, code_dir: str) -> str:
             env=resolve_auth_env(),
         ),
     ):
-        if isinstance(message, ResultMessage):
+        if message is not None and isinstance(message, ResultMessage):
             result_parts.append(message.result)
 
     return "\n".join(result_parts)
