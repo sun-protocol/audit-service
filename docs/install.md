@@ -18,9 +18,9 @@ cp .env.example .env
 | Variable | Description |
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | Anthropic API key (option 1) |
-| `CLAUDE_CODE_TOKEN` | Claude Code subscription token (option 2) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code subscription token (option 2) |
 
-To generate a `CLAUDE_CODE_TOKEN` (requires a Claude subscription):
+To generate a `CLAUDE_CODE_OAUTH_TOKEN` (requires a Claude subscription):
 
 ```bash
 claude setup-token

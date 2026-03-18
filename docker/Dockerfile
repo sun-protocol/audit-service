@@ -11,9 +11,7 @@ RUN apt-get update && \
 RUN npm install -g @anthropic-ai/claude-code
 
 # Install Solidity smart contract analysis tools
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir numpy && \
-    pip install --no-cache-dir slither-analyzer mythril
+RUN pip install --no-cache-dir slither-analyzer
 
 WORKDIR /app
 

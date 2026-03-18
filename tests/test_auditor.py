@@ -29,6 +29,7 @@ async def test_run_audit_returns_markdown():
     with (
         patch("src.audit_service.auditor.query", side_effect=mock_query),
         patch("src.audit_service.auditor.ResultMessage", MockResult),
+        patch("src.audit_service.auditor.resolve_auth_env", return_value={}),
     ):
         result = await run_audit(
             skill=_make_skill(),
@@ -53,6 +54,7 @@ async def test_run_audit_concatenates_multiple_results():
     with (
         patch("src.audit_service.auditor.query", side_effect=mock_query),
         patch("src.audit_service.auditor.ResultMessage", type(results[0])),
+        patch("src.audit_service.auditor.resolve_auth_env", return_value={}),
     ):
         result = await run_audit(
             skill=_make_skill(),
@@ -79,6 +81,7 @@ async def test_run_audit_passes_skill_dir_as_add_dirs():
     with (
         patch("src.audit_service.auditor.query", side_effect=mock_query),
         patch("src.audit_service.auditor.ResultMessage", MockResult),
+        patch("src.audit_service.auditor.resolve_auth_env", return_value={}),
     ):
         await run_audit(skill=skill, code_dir="/tmp/code")
 

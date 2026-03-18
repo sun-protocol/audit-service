@@ -37,6 +37,14 @@ def _mock_skills():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _disable_api_key_auth():
+    with patch("src.audit_service.main.settings") as mock_settings:
+        mock_settings.get_api_keys.return_value = set()
+        mock_settings.max_upload_size = 52_428_800
+        yield mock_settings
+
+
 @pytest.mark.asyncio
 async def test_audit_rejected_without_api_key(test_zip: bytes):
     with patch("src.audit_service.main.settings") as mock_settings:

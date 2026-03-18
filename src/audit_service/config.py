@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
-    claude_code_token: str = ""
+    claude_code_oauth_token: str = ""
     api_keys: str = ""  # comma-separated list of valid API keys for audit service
     skills_dir: str = "./skills"
     claude_model: str = "claude-sonnet-4-6"

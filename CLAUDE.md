@@ -35,7 +35,7 @@ ruff format src/ tests/
 - `main.py` — FastAPI app with `/audit/{skill}` endpoint and `/reports/` file browser. API key auth via `X-API-Key` header (optional, controlled by `API_KEYS` env var).
 - `auditor.py` — Calls `claude_code_sdk.query()` with `Read/Glob/Grep` tools only, `bypassPermissions` mode. Auth env resolved from config.
 - `skill_loader.py` — Loads skills from `skills/` directory. Each skill is a `SKILL.md` with YAML frontmatter + prompt body, plus optional `references/` and `resources/` subdirs that get injected into the system prompt.
-- `config.py` — `pydantic-settings` config from `.env`. Two auth modes: `ANTHROPIC_API_KEY` or `CLAUDE_CODE_TOKEN`.
+- `config.py` — `pydantic-settings` config from `.env`. Two auth modes: `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`.
 - `html_converter.py` — Converts markdown reports to styled standalone HTML using `markdown2`.
 
 **Skills system:** Skills live in `skills/<name>/SKILL.md`. Frontmatter defines `name`, `description`, `report_path` (default: `.audit/Audit-Report.md`). The agent writes its report to `report_path` inside the code dir; if not found, falls back to raw agent output.

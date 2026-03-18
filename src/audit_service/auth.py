@@ -10,15 +10,15 @@ def resolve_auth_env() -> dict[str, str]:
 
     Returns env dict with the appropriate auth token:
     - ANTHROPIC_API_KEY mode: uses Anthropic API key directly
-    - CLAUDE_CODE_TOKEN mode: uses Claude Code subscription token
+    - CLAUDE_CODE_OAUTH_TOKEN mode: uses Claude Code subscription token
     - Both empty: returns empty dict, logs a warning
     """
     if settings.anthropic_api_key:
         return {"ANTHROPIC_API_KEY": settings.anthropic_api_key}
-    if settings.claude_code_token:
-        return {"CLAUDE_CODE_TOKEN": settings.claude_code_token}
+    if settings.claude_code_oauth_token:
+        return {"CLAUDE_CODE_OAUTH_TOKEN": settings.claude_code_oauth_token}
     logger.warning(
-        "No ANTHROPIC_API_KEY or CLAUDE_CODE_TOKEN configured. "
+        "No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN configured. "
         "Claude Code SDK authentication may fail."
     )
     return {}

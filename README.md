@@ -27,7 +27,7 @@ cp .env.example .env
 |----------|-------------|---------|
 | `API_KEYS` | Service API keys for client auth (comma-separated). Leave empty to disable. | |
 | `ANTHROPIC_API_KEY` | Anthropic API key (option 1) | |
-| `CLAUDE_CODE_TOKEN` | Claude Code subscription token (option 2) | |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code subscription token (option 2) | |
 | `SKILLS_DIR` | Path to skills directory | `./skills` |
 | `CLAUDE_MODEL` | Claude model to use | `claude-sonnet-4-6` |
 | `MAX_UPLOAD_SIZE` | Max upload size in bytes | `52428800` (50MB) |
@@ -36,9 +36,9 @@ cp .env.example .env
 
 **Claude authentication** (configure one):
 - `ANTHROPIC_API_KEY` — use an Anthropic API key directly
-- `CLAUDE_CODE_TOKEN` — use a Claude Code subscription token
+- `CLAUDE_CODE_OAUTH_TOKEN` — use a Claude Code subscription token
 
-To generate a `CLAUDE_CODE_TOKEN` (requires a Claude subscription):
+To generate a `CLAUDE_CODE_OAUTH_TOKEN` (requires a Claude subscription):
 
 ```bash
 claude setup-token
@@ -47,7 +47,7 @@ claude setup-token
 This opens the browser for OAuth authorization and generates a long-lived token. Copy it to `.env`:
 
 ```
-CLAUDE_CODE_TOKEN=your-token-here
+CLAUDE_CODE_OAUTH_TOKEN=your-token-here
 ```
 
 **Service authentication** (optional):
