@@ -32,7 +32,7 @@ jobs:
       - name: Run audit
         id: audit
         run: |
-          RESPONSE=$(curl -s -X POST "${{ vars.AUDIT_SERVICE_URL }}/audit/${{ vars.AUDIT_SKILL }}" \
+          RESPONSE=$(curl -s -X POST "${{ vars.AUDIT_SERVICE_URL }}/audit-security/${{ vars.AUDIT_SKILL }}" \
             -H "X-API-Key: ${{ secrets.AUDIT_API_KEY }}" \
             -F "file=@code.zip")
           echo "response=$RESPONSE" >> "$GITHUB_OUTPUT"

@@ -29,11 +29,11 @@ ruff format src/ tests/
 
 ## Architecture
 
-**Request flow:** `POST /audit/{skill}` -> validate zip + skill -> extract to `reports/<project>/<timestamp>/code/` -> `run_audit()` calls Claude Code SDK with skill's system prompt -> agent writes markdown report -> convert to HTML -> return report URL.
+**Request flow:** `POST /audit-security/{skill}` -> validate zip + skill -> extract to `reports/<project>/<timestamp>/code/` -> `run_audit()` calls Claude Code SDK with skill's system prompt -> agent writes markdown report -> convert to HTML -> return report URL. `POST /audit-pr/{skill}` works similarly but takes `from_branch` and `to_branch` form fields, calls `run_pr_audit()` which diffs between branches and audits only changed code.
 
 **Key modules in `src/audit_service/`:**
-- `main.py` — FastAPI app with `/audit/{skill}` endpoint and `/reports/` file browser. API key auth via `X-API-Key` header (optional, controlled by `API_KEYS` env var).
-- `auditor.py` — Calls `claude_code_sdk.query()` with `Read/Glob/Grep` tools only, `bypassPermissions` mode. Auth env resolved from config.
+- `main.py` — FastAPI app with `/audit-security/{skill}`, `/audit-pr/{skill}` endpoints and `/reports/` file browser. API key auth via `X-API-Key` header (optional, controlled by `API_KEYS` env var).
+- `auditor.py` — `run_audit()` calls `claude_code_sdk.query()` with `Read/Glob/Grep` tools only; `run_pr_audit()` adds `Bash` tool for git diff. Both use `bypassPermissions` mode. Auth env resolved from config.
 - `skill_loader.py` — Loads skills from `skills/` directory. Each skill is a `SKILL.md` with YAML frontmatter + prompt body, plus optional `references/` and `resources/` subdirs that get injected into the system prompt.
 - `config.py` — `pydantic-settings` config from `.env`. Two auth modes: `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`.
 - `html_converter.py` — Converts markdown reports to styled standalone HTML using `markdown2`.

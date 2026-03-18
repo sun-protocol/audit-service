@@ -53,7 +53,7 @@ async def test_audit_rejected_without_api_key(test_zip: bytes):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/audit/backend-server-scanner",
+                "/audit-security/backend-server-scanner",
                 files={"file": ("code.zip", test_zip, "application/zip")},
             )
     assert resp.status_code == 401
@@ -67,7 +67,7 @@ async def test_audit_rejected_with_wrong_api_key(test_zip: bytes):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/audit/backend-server-scanner",
+                "/audit-security/backend-server-scanner",
                 files={"file": ("code.zip", test_zip, "application/zip")},
                 headers={"X-API-Key": "ask-wrong-key"},
             )
@@ -79,7 +79,7 @@ async def test_audit_invalid_skill(test_zip: bytes):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/audit/nonexistent-skill",
+            "/audit-security/nonexistent-skill",
             files={"file": ("code.zip", test_zip, "application/zip")},
         )
     assert resp.status_code == 400
@@ -91,7 +91,7 @@ async def test_audit_non_zip_filename():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/audit/backend-server-scanner",
+            "/audit-security/backend-server-scanner",
             files={"file": ("code.tar.gz", b"data", "application/gzip")},
         )
     assert resp.status_code == 400
@@ -103,7 +103,7 @@ async def test_audit_invalid_zip(test_zip: bytes):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/audit/backend-server-scanner",
+            "/audit-security/backend-server-scanner",
             files={"file": ("code.zip", b"not a zip", "application/zip")},
         )
     assert resp.status_code == 400
@@ -125,7 +125,7 @@ async def test_audit_success(test_zip: bytes):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/audit/backend-server-scanner",
+                "/audit-security/backend-server-scanner",
                 files={"file": ("code.zip", test_zip, "application/zip")},
             )
 
@@ -151,7 +151,7 @@ async def test_audit_sanitizes_project_name():
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/audit/backend-server-scanner",
+                "/audit-security/backend-server-scanner",
                 files={"file": ("../../etc/passwd.zip", malicious_zip, "application/zip")},
             )
 

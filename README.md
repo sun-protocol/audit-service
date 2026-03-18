@@ -80,9 +80,9 @@ The service will be available at `http://localhost:8000`. The reports directory 
 
 ## API
 
-### POST /audit/{skill}
+### POST /audit-security/{skill}
 
-Upload a zip archive and run an audit with the specified skill. Returns the URL of the generated HTML report.
+Upload a zip archive and run a full security audit with the specified skill. Returns the URL of the generated HTML report.
 
 **Path parameter:**
 
@@ -105,7 +105,7 @@ Upload a zip archive and run an audit with the specified skill. Returns the URL 
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/audit/smart-contract-audit \
+curl -X POST http://localhost:8000/audit-security/smart-contract-audit \
   -H "X-API-Key: ask-xxxxx" \
   -F "file=@code.zip"
 ```
@@ -121,6 +121,54 @@ curl -X POST http://localhost:8000/audit/smart-contract-audit \
 | 200 | Audit completed, returns report URL |
 | 400 | Invalid skill / invalid zip / file too large |
 | 401 | Invalid or missing API key |
+| 500 | Audit execution failed |
+
+### POST /audit-pr/{skill}
+
+Upload a zip archive and audit only the changes between two branches (PR audit). Returns the URL of the generated HTML report.
+
+**Path parameter:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `skill` | Skill name (directory name under `skills/`) |
+
+**Request:** `multipart/form-data`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | file | Zip archive of source code (must include git history) |
+| `from_branch` | string | Target branch, e.g. `main` |
+| `to_branch` | string | Source branch, e.g. `feature/xxx` |
+
+**Headers:**
+
+| Header | Description |
+|--------|-------------|
+| `X-API-Key` | Service API key (required when `API_KEYS` is configured) |
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/audit-pr/smart-contract-audit \
+  -H "X-API-Key: ask-xxxxx" \
+  -F "file=@code.zip" \
+  -F "from_branch=main" \
+  -F "to_branch=feature/new-token"
+```
+
+**Response:** `application/json`
+
+```json
+{"report_url": "/reports/code/20260318-150000/audit-report.html"}
+```
+
+| Status | Description |
+|--------|-------------|
+| 200 | Audit completed, returns report URL |
+| 400 | Invalid skill / invalid zip / file too large / missing branch params |
+| 401 | Invalid or missing API key |
+| 422 | Missing required form fields |
 | 500 | Audit execution failed |
 
 ### GET /reports/{path}
@@ -214,7 +262,7 @@ pytest tests/ -v
 ```
 audit-service/
 ├── src/audit_service/
-│   ├── main.py              # FastAPI app, /audit endpoint, report browser
+│   ├── main.py              # FastAPI app, /audit-security + /audit-pr endpoints, report browser
 │   ├── auditor.py           # Claude Code SDK audit execution
 │   ├── auth.py              # Claude auth env resolution
 │   ├── config.py            # Settings (pydantic-settings)

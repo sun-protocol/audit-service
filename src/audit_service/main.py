@@ -9,11 +9,11 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.security import APIKeyHeader
 
-from .auditor import run_audit
+from .auditor import run_audit, run_pr_audit
 from .config import settings
 from .html_converter import markdown_to_html
 from .skill_loader import load_skills
@@ -113,7 +113,7 @@ async def index():
     )
 
 
-@app.post("/audit/{skill}", dependencies=[Depends(verify_api_key)])
+@app.post("/audit-security/{skill}", dependencies=[Depends(verify_api_key)])
 async def audit(skill: str, file: UploadFile = File(...)):
     logger.info("Received audit request: file=%s, skill=%s", file.filename, skill)
 
@@ -130,12 +130,12 @@ async def audit(skill: str, file: UploadFile = File(...)):
             detail=f"Skill '{skill}' not found. Available skills: {available}",
         )
 
-    # 3. Create report directory: reports/<project_name>/<timestamp>/
+    # 3. Create report directory: reports/<project_name>/security/<timestamp>/
     project_name = _sanitize_name(file.filename.removesuffix(".zip"))
     if not project_name:
         project_name = "unnamed"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    report_dir = REPORTS_DIR / project_name / timestamp
+    report_dir = REPORTS_DIR / project_name / "security" / timestamp
     report_dir.mkdir(parents=True, exist_ok=True)
 
     code_dir = report_dir / "code"
@@ -196,7 +196,9 @@ async def audit(skill: str, file: UploadFile = File(...)):
         html_path = report_dir / "audit-report.html"
         html_path.write_text(html_content, encoding="utf-8")
 
-        report_url = f"/reports/{project_name}/{timestamp}/audit-report.html"
+        report_url = (
+            f"/reports/{project_name}/security/{timestamp}/audit-report.html"
+        )
         logger.info("Audit report saved to %s", report_dir)
 
         # 7. Return report URL
@@ -210,5 +212,139 @@ async def audit(skill: str, file: UploadFile = File(...)):
         )
     finally:
         # Clean up report_dir on failure (no audit-report.html means incomplete)
+        if not (report_dir / "audit-report.html").exists():
+            shutil.rmtree(report_dir, ignore_errors=True)
+
+
+@app.post("/audit-pr/{skill}", dependencies=[Depends(verify_api_key)])
+async def audit_pr(
+    skill: str,
+    file: UploadFile = File(...),
+    from_branch: str = Form(...),
+    to_branch: str = Form(...),
+):
+    logger.info(
+        "Received PR audit request: file=%s, skill=%s, from=%s, to=%s",
+        file.filename,
+        skill,
+        from_branch,
+        to_branch,
+    )
+
+    # 1. Validate file type
+    if not file.filename or not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="File must be a .zip archive")
+
+    # 2. Validate skill
+    skills = _cached_skills()
+    if skill not in skills:
+        available = list(skills.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"Skill '{skill}' not found. Available skills: {available}",
+        )
+
+    # 3. Validate branch params
+    if not from_branch.strip():
+        raise HTTPException(status_code=400, detail="from_branch must not be empty")
+    if not to_branch.strip():
+        raise HTTPException(status_code=400, detail="to_branch must not be empty")
+
+    # 4. Create report directory: reports/<project_name>/pr/<timestamp>/
+    project_name = _sanitize_name(file.filename.removesuffix(".zip"))
+    if not project_name:
+        project_name = "unnamed"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    report_dir = REPORTS_DIR / project_name / "pr" / timestamp
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    code_dir = report_dir / "code"
+    code_dir.mkdir(exist_ok=True)
+
+    try:
+        content = await file.read()
+
+        if len(content) > settings.max_upload_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Maximum size: {settings.max_upload_size} bytes",
+            )
+
+        zip_path = report_dir / "upload.zip"
+        zip_path.write_bytes(content)
+
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                for name in zf.namelist():
+                    extracted = (code_dir / name).resolve()
+                    if not str(extracted).startswith(str(code_dir)):
+                        raise HTTPException(
+                            status_code=400, detail="Zip contains unsafe paths"
+                        )
+                zf.extractall(code_dir)
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Invalid zip file")
+
+        # Verify the zip contains a git repository
+        git_dir = code_dir / ".git"
+        if not git_dir.exists():
+            # Check one level down (zip may have a root folder)
+            subdirs = [d for d in code_dir.iterdir() if d.is_dir()]
+            nested_git = next(
+                (d / ".git" for d in subdirs if (d / ".git").exists()),
+                None,
+            )
+            if nested_git is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Zip must contain a git repository (.git directory) "
+                        "for PR audit. Do not exclude .git when packaging."
+                    ),
+                )
+
+        # 5. Run PR audit
+        skill_obj = skills[skill]
+        agent_output = await run_pr_audit(
+            skill=skill_obj,
+            code_dir=str(code_dir),
+            from_branch=from_branch.strip(),
+            to_branch=to_branch.strip(),
+        )
+        await asyncio.sleep(2)
+
+        # 6. Read report from skill-defined path, fallback to agent output
+        report_candidates = [
+            code_dir / skill_obj.report_path,
+            report_dir / skill_obj.report_path,
+        ]
+        skill_report_file = next((f for f in report_candidates if f.exists()), None)
+        if skill_report_file is not None:
+            md_report = skill_report_file.read_text(encoding="utf-8")
+            logger.info("Using report from %s", skill_report_file)
+        else:
+            md_report = agent_output
+            logger.info(
+                "Report file %s not found, using agent output",
+                skill_obj.report_path,
+            )
+
+        # 7. Convert to HTML and save
+        html_content = markdown_to_html(md_report, title=f"PR Audit Report - {skill}")
+        html_path = report_dir / "audit-report.html"
+        html_path.write_text(html_content, encoding="utf-8")
+
+        report_url = f"/reports/{project_name}/pr/{timestamp}/audit-report.html"
+        logger.info("PR audit report saved to %s", report_dir)
+
+        return {"report_url": report_url}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("PR audit failed: skill=%s file=%s", skill, file.filename)
+        raise HTTPException(
+            status_code=500, detail="PR audit failed. See server logs."
+        )
+    finally:
         if not (report_dir / "audit-report.html").exists():
             shutil.rmtree(report_dir, ignore_errors=True)
