@@ -15,8 +15,8 @@ async def run_audit(skill: Skill, code_dir: str) -> str:
 
     async for message in query(
         prompt=(
-            f"请审计 {code_dir} 目录下的所有代码，按照审计规则生成完整的审计报告（Markdown格式）。"
-            "报告应包含：概述、详细发现、严重程度分类、修复建议和总结。"
+            f"Audit all code in the {code_dir} directory and generate a complete audit report in Markdown format. "
+            "The report should include: an overview, detailed findings, severity classifications, remediation recommendations, and a summary."
         ),
         options=ClaudeCodeOptions(
             cwd=code_dir,

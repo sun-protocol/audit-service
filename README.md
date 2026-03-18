@@ -67,6 +67,17 @@ Development mode (hot reload):
 uvicorn src.audit_service.main:app --reload
 ```
 
+### Docker
+
+Make sure `.env` is configured (see [Configuration](#configuration)), then:
+
+```bash
+docker compose up --build        # foreground
+docker compose up --build -d     # detached (background)
+```
+
+The service will be available at `http://localhost:8000`. The reports directory is mounted as a volume so reports persist across restarts. Skills are baked into the image — rebuild to update them.
+
 ## API
 
 ### POST /audit/{skill}
