@@ -36,42 +36,28 @@ jobs:
             -H "X-API-Key: ${{ secrets.AUDIT_API_KEY }}" \
             -F "file=@code.zip")
           echo "response=$RESPONSE" >> "$GITHUB_OUTPUT"
-          STATUS_URL=$(echo "$RESPONSE" | jq -r '.status_url // empty')
           REPORT_URL=$(echo "$RESPONSE" | jq -r '.report_url // empty')
-          if [ -z "$STATUS_URL" ]; then
+          STATUS_URL=$(echo "$RESPONSE" | jq -r '.status_url // empty')
+          if [ -z "$REPORT_URL" ]; then
             echo "Audit submission failed: $RESPONSE"
             exit 1
           fi
-          echo "status_url=$STATUS_URL" >> "$GITHUB_OUTPUT"
           echo "report_url=$REPORT_URL" >> "$GITHUB_OUTPUT"
+          echo "status_url=$STATUS_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for audit to complete
-        id: wait
-        run: |
-          STATUS_URL="${{ vars.AUDIT_SERVICE_URL }}${{ steps.audit.outputs.status_url }}"
-          for i in $(seq 1 60); do
-            STATUS=$(curl -s "$STATUS_URL" | jq -r '.status')
-            if [ "$STATUS" = "completed" ]; then
-              echo "Audit completed"
-              exit 0
-            fi
-            echo "Attempt $i: status=$STATUS, waiting 30s..."
-            sleep 30
-          done
-          echo "Audit timed out after 30 minutes"
-          exit 1
-
-      - name: Comment PR with report link
+      - name: Comment PR with audit links
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const reportUrl = `${{ vars.AUDIT_SERVICE_URL }}${{ steps.audit.outputs.report_url }}`;
+            const baseUrl = `${{ vars.AUDIT_SERVICE_URL }}`;
+            const reportUrl = `${baseUrl}${{ steps.audit.outputs.report_url }}`;
+            const statusUrl = `${baseUrl}${{ steps.audit.outputs.status_url }}`;
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## Security Audit Report\n\nAudit completed. [View Report](${reportUrl})`
+              body: `## Security Audit Submitted\n\nAudit is running in the background.\n\n- [Check Status](${statusUrl})\n- [View Report](${reportUrl}) (available when completed)`
             });
 ```
 
@@ -109,41 +95,27 @@ jobs:
             -F "from_branch=${{ github.base_ref }}" \
             -F "to_branch=${{ github.head_ref }}")
           echo "response=$RESPONSE" >> "$GITHUB_OUTPUT"
-          STATUS_URL=$(echo "$RESPONSE" | jq -r '.status_url // empty')
           REPORT_URL=$(echo "$RESPONSE" | jq -r '.report_url // empty')
-          if [ -z "$STATUS_URL" ]; then
+          STATUS_URL=$(echo "$RESPONSE" | jq -r '.status_url // empty')
+          if [ -z "$REPORT_URL" ]; then
             echo "PR audit submission failed: $RESPONSE"
             exit 1
           fi
-          echo "status_url=$STATUS_URL" >> "$GITHUB_OUTPUT"
           echo "report_url=$REPORT_URL" >> "$GITHUB_OUTPUT"
+          echo "status_url=$STATUS_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for audit to complete
-        id: wait
-        run: |
-          STATUS_URL="${{ vars.AUDIT_SERVICE_URL }}${{ steps.audit.outputs.status_url }}"
-          for i in $(seq 1 60); do
-            STATUS=$(curl -s "$STATUS_URL" | jq -r '.status')
-            if [ "$STATUS" = "completed" ]; then
-              echo "PR audit completed"
-              exit 0
-            fi
-            echo "Attempt $i: status=$STATUS, waiting 30s..."
-            sleep 30
-          done
-          echo "PR audit timed out after 30 minutes"
-          exit 1
-
-      - name: Comment PR with report link
+      - name: Comment PR with audit links
         uses: actions/github-script@v7
         with:
           script: |
-            const reportUrl = `${{ vars.AUDIT_SERVICE_URL }}${{ steps.audit.outputs.report_url }}`;
+            const baseUrl = `${{ vars.AUDIT_SERVICE_URL }}`;
+            const reportUrl = `${baseUrl}${{ steps.audit.outputs.report_url }}`;
+            const statusUrl = `${baseUrl}${{ steps.audit.outputs.status_url }}`;
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## PR Code Review Report\n\nReview completed. [View Report](${reportUrl})`
+              body: `## PR Code Review Submitted\n\nReview is running in the background.\n\n- [Check Status](${statusUrl})\n- [View Report](${reportUrl}) (available when completed)`
             });
 ```
 
