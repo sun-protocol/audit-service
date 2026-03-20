@@ -17,6 +17,7 @@ from fastapi.security import APIKeyHeader
 from .auditor import run_audit, run_pr_audit
 from .config import settings
 from .html_converter import markdown_to_html
+from .md_merge_converter import merge_and_convert
 from .skill_loader import Skill, load_skills
 
 logger = logging.getLogger(__name__)
@@ -69,19 +70,17 @@ def _run_security_audit_background(
     report_dir: Path,
     report_url: str,
 ) -> None:
-    """Run security audit in background thread, write HTML report when done."""
+    """Run security audit in background thread, write HTML + MD reports when done."""
     loop = asyncio.new_event_loop()
     try:
         agent_output = loop.run_until_complete(
             run_audit(skill=skill, code_dir=str(code_dir))
         )
 
-        md_report = _resolve_report(skill, code_dir, report_dir, agent_output)
-        html_content = markdown_to_html(
-            md_report, title=f"Audit Report - {skill.name}"
+        _save_reports(
+            skill, code_dir, report_dir, agent_output,
+            title=f"Audit Report - {skill.name}",
         )
-        html_path = report_dir / "audit-report.html"
-        html_path.write_text(html_content, encoding="utf-8")
         logger.info("Security audit report saved: %s", report_url)
     except Exception:
         logger.exception("Background security audit failed: %s", report_url)
@@ -99,7 +98,7 @@ def _run_pr_audit_background(
     from_branch: str,
     to_branch: str,
 ) -> None:
-    """Run PR audit in background thread, write HTML report when done."""
+    """Run PR audit in background thread, write HTML + MD reports when done."""
     loop = asyncio.new_event_loop()
     try:
         agent_output = loop.run_until_complete(
@@ -111,12 +110,10 @@ def _run_pr_audit_background(
             )
         )
 
-        md_report = _resolve_report(skill, code_dir, report_dir, agent_output)
-        html_content = markdown_to_html(
-            md_report, title=f"PR Audit Report - {skill.name}"
+        _save_reports(
+            skill, code_dir, report_dir, agent_output,
+            title=f"PR Audit Report - {skill.name}",
         )
-        html_path = report_dir / "audit-report.html"
-        html_path.write_text(html_content, encoding="utf-8")
         logger.info("PR audit report saved: %s", report_url)
     except Exception:
         logger.exception("Background PR audit failed: %s", report_url)
@@ -155,6 +152,40 @@ def _resolve_report(
         return skill_report_file.read_text(encoding="utf-8")
     logger.info("Report file %s not found, using agent output", skill.report_path)
     return agent_output
+
+
+def _find_audit_dir(report_dir: Path) -> Path | None:
+    """Locate the .audit directory inside the code tree under report_dir."""
+    candidates = list(report_dir.rglob(".audit"))
+    for c in candidates:
+        if c.is_dir():
+            return c
+    return None
+
+
+def _save_reports(
+    skill: Skill,
+    code_dir: Path,
+    report_dir: Path,
+    agent_output: str,
+    title: str,
+) -> None:
+    """Resolve report content, save HTML and merged markdown."""
+    # Try merging all .audit/ markdown files first
+    audit_dir = _find_audit_dir(report_dir)
+    if audit_dir is not None:
+        merged_md, merged_html = merge_and_convert(audit_dir, title=title)
+        if merged_md:
+            logger.info("Using merged .audit/ markdown (%d chars)", len(merged_md))
+            (report_dir / "audit-report.md").write_text(merged_md, encoding="utf-8")
+            (report_dir / "audit-report.html").write_text(merged_html, encoding="utf-8")
+            return
+
+    # Fallback: single report file or raw agent output
+    md_report = _resolve_report(skill, code_dir, report_dir, agent_output)
+    (report_dir / "audit-report.md").write_text(md_report, encoding="utf-8")
+    html_content = markdown_to_html(md_report, title=title)
+    (report_dir / "audit-report.html").write_text(html_content, encoding="utf-8")
 
 
 def _write_error_report(report_dir: Path, message: str) -> None:
